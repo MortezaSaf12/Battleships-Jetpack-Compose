@@ -12,7 +12,7 @@ data class LobbyUiState(
     val incomingChallenge: Triple<String, String, String>? = null,
     val outgoingChallengeId: String? = null,
     val outgoingChallengeOpponent: String? = null,
-    val navigateToGame: Pair<String, String>? = null, // playerName, opponentName
+    val navigateToGame: Triple<String, String, String>? = null, // playerName, opponentName, gameId
     val error: String? = null
 )
 
@@ -75,20 +75,25 @@ class LobbyViewModel(
                 val toPlayer = data["toPlayer"] as? String
 
                 if (status == "accepted" && fromPlayer == loggedInUsername && toPlayer == opponentName) {
-                    _uiState.update { it.copy(navigateToGame = fromPlayer to toPlayer) }
+                    val gameId = data["gameId"] as? String
+                    if (gameId != null) {
+                        _uiState.update { it.copy(navigateToGame = Triple(fromPlayer, toPlayer, gameId)) }
+                    }
                 }
              }
         }
     }
 
     fun onAcceptChallenge(challengeId: String, fromPlayer: String) {
-        repository.acceptChallenge(
+        repository.acceptChallengeWithGame(
             challengeId = challengeId,
-            onSuccess = {
+            playerA = fromPlayer, // Challenger (Player 1)
+            playerB = loggedInUsername, // Acceptor (Player 2)
+            onSuccess = { gameId ->
                 _uiState.update {
                     it.copy(
                         incomingChallenge = null,
-                        navigateToGame = loggedInUsername to fromPlayer
+                        navigateToGame = Triple(loggedInUsername, fromPlayer, gameId)
                     )
                 }
             },

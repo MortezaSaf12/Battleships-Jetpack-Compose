@@ -11,6 +11,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.battleship.data.BattleshipRepository
 import com.example.battleship.ui.game.GameBoardScreen
 import com.example.battleship.ui.game.GameViewModel
+import com.example.battleship.ui.game.GameViewModelFactory
 import com.example.battleship.ui.lobby.LobbyScreen
 import com.example.battleship.ui.lobby.LobbyViewModel
 import com.example.battleship.ui.lobby.LobbyViewModelFactory
@@ -45,13 +46,14 @@ fun Navigation() {
                 LobbyScreen(viewModel, navController, loggedInUsername)
             }
         }
-        composable("GameBoardScreen?playerName={playerName}&opponentName={opponentName}") { backStackEntry ->
+        composable("GameBoardScreen?gameId={gameId}&playerName={playerName}&opponentName={opponentName}") { backStackEntry ->
+            val gameId = backStackEntry.arguments?.getString("gameId").orEmpty()
             val playerName = backStackEntry.arguments?.getString("playerName").orEmpty()
             val opponentName = backStackEntry.arguments?.getString("opponentName").orEmpty()
             
-            // GameViewModel doesn't need specific args for now based on current logic, 
-            // but we might want to pass them in future.
-            val viewModel: GameViewModel = viewModel()
+            val viewModel: GameViewModel = viewModel(
+                factory = GameViewModelFactory(repository, gameId, playerName, opponentName)
+            )
             
             GameBoardScreen(viewModel, navController, playerName, opponentName)
         }

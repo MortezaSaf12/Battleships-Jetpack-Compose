@@ -7,9 +7,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import java.util.UUID
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
+import com.google.firebase.firestore.FieldValue
 
 class BattleshipRepository {
     private val firestore = FirebaseFirestore.getInstance()
@@ -166,5 +164,121 @@ class BattleshipRepository {
             .addOnFailureListener { exception ->
                 Log.e("ChallengeError", "Error declining challenge: ${exception.message}")
             }
+    }
+    }
+
+    // Game Logic
+    fun createGame(
+        playerA: String,
+        playerB: String,
+        onSuccess: (String) -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        val newGame = mapOf(
+            "player1" to playerA,
+            "player2" to playerB,
+            "player1Ready" to false,
+            "player2Ready" to false,
+            "turn" to playerA, // Player A starts
+            "status" to "active",
+            "winner" to "",
+            "moves" to emptyList<Map<String, Any>>()
+        )
+
+        firestore.collection("games")
+            .add(newGame)
+            .addOnSuccessListener { docRef -> onSuccess(docRef.id) }
+            .addOnFailureListener { e -> onFailure(e) }
+    }
+
+    fun listenForActiveGame(
+        playerName: String,
+        onGameFound: (String) -> Unit
+    ): ListenerRegistration {
+    
+        return firestore.collection("games")
+            .whereArrayContains("players_index", playerName)
+            .whereEqualTo("status", "active")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                snapshot?.documents?.firstOrNull()?.let { doc ->
+                    onGameFound(doc.id)
+                }
+            }
+    }
+    
+    fun acceptChallengeWithGame(
+        challengeId: String,
+        playerA: String,
+        playerB: String,
+        onSuccess: (String) -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        // 1. Create Game
+        val newGame = mapOf(
+            "player1" to playerA,
+            "player2" to playerB,
+            "player1Ready" to false,
+            "player2Ready" to false,
+            "turn" to playerA,
+            "status" to "setup", 
+            "winner" to ""
+        )
+        
+        firestore.collection("games")
+            .add(newGame)
+            .addOnSuccessListener { gameDoc ->
+                // 2. Update Challenge with Game ID and status
+                firestore.collection("challenges").document(challengeId)
+                    .update(mapOf("status" to "accepted", "gameId" to gameDoc.id))
+                    .addOnSuccessListener { onSuccess(gameDoc.id) }
+                    .addOnFailureListener { onFailure(it) }
+            }
+            .addOnFailureListener { onFailure(it) }
+    }
+
+    fun listenForGame(gameId: String): Flow<Map<String, Any?>> = callbackFlow {
+        val listener = firestore.collection("games").document(gameId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null && snapshot.exists()) {
+                    trySend(snapshot.data ?: emptyMap())
+                }
+            }
+        awaitClose { listener.remove() }
+    }
+
+    fun updatePlayerBoard(
+        gameId: String,
+        playerField: String, 
+        board: List<List<String>>,
+        readyField: String,
+        onSuccess: () -> Unit
+    ) {
+        val serializedBoard = board.map { row -> row.joinToString("") }
+        
+        firestore.collection("games").document(gameId)
+            .update(
+                mapOf(
+                    playerField to serializedBoard,
+                    readyField to true
+                )
+            )
+            .addOnSuccessListener { onSuccess() }
+    }
+
+    fun makeMove(
+        gameId: String,
+        move: Map<String, Any>
+    ) {
+        firestore.collection("games").document(gameId)
+            .update("moves", FieldValue.arrayUnion(move))
+    }
+    
+    fun updateGameState(gameId: String, updates: Map<String, Any>) {
+        firestore.collection("games").document(gameId).update(updates)
     }
 }

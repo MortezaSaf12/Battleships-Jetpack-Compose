@@ -76,10 +76,19 @@ fun GameBoardScreen(
 
         // Gameplay Phase
         if (uiState.isPlayerReady) {
+            val statusText = when {
+                uiState.gameWon -> "VICTORY! You sank all ships!"
+                uiState.gameLost -> "DEFEAT! Your ships were sunk."
+                !uiState.isOpponentReady -> "Waiting for opponent to place ships..."
+                uiState.isMyTurn -> "YOUR TURN! Fire at will!"
+                else -> "OPPONENT'S TURN. Brace for impact!"
+            }
+            
             Text(
-                text = "Game On! Take your turns.",
+                text = statusText,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
+                color = if (uiState.isMyTurn || uiState.gameWon) Color.Green else Color.Red,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             Spacer(modifier = Modifier.height(16.dp))

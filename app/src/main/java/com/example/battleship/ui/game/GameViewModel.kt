@@ -1,21 +1,28 @@
 package com.example.battleship.ui.game
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.battleship.data.BattleshipRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 data class GameUiState(
     val playerGrid: List<List<String>> = List(10) { List(10) { "W" } },
-    val opponentGrid: List<List<String>> = List(10) { List(10) { "W" } },
+    val opponentGrid: List<List<String>> = List(10) { List(10) { "W" } }, // View of the opponent's board (shots fired)
+    val trueOpponentBoard: List<List<String>>? = null, // Actual opponent board (for hit testing)
     val isShipPlacementPhase: Boolean = true,
     val currentShipIndex: Int = 0,
     val isPlayerReady: Boolean = false,
+    val isOpponentReady: Boolean = false,
     val startPoint: Pair<Int, Int>? = null,
     val endPoint: Pair<Int, Int>? = null,
-    val isPlayerOneTurn: Boolean = true,
+    val isMyTurn: Boolean = false,
     val gameWon: Boolean = false,
+    val gameLost: Boolean = false,
     val ships: List<Pair<String, Int>> = listOf(
         "Carrier" to 4,
         "Battleship" to 3,
@@ -26,10 +33,78 @@ data class GameUiState(
     )
 )
 
-class GameViewModel : ViewModel() {
+class GameViewModel(
+    private val repository: BattleshipRepository,
+    private val gameId: String,
+    private val playerName: String,
+    private val opponentName: String
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
+
+    init {
+        startListeningToGame()
+    }
+
+    private fun startListeningToGame() {
+        viewModelScope.launch {
+            repository.listenForGame(gameId).collect { gameData ->
+                val status = gameData["status"] as? String
+                val turn = gameData["turn"] as? String
+                val player1 = gameData["player1"] as? String
+                val player2 = gameData["player2"] as? String
+                
+                // Determine if I am player 1 or 2
+                val isPlayer1 = playerName == player1
+                val myBoardField = if (isPlayer1) "player1Board" else "player2Board"
+                val opponentBoardField = if (isPlayer1) "player2Board" else "player1Board"
+                val myReadyField = if (isPlayer1) "player1Ready" else "player2Ready"
+                val opponentReadyField = if (isPlayer1) "player2Ready" else "player1Ready"
+
+                val opponentReady = gameData[opponentReadyField] as? Boolean ?: false
+                val moves = gameData["moves"] as? List<Map<String, Any>> ?: emptyList()
+                val winner = gameData["winner"] as? String
+
+                // Parse Opponent Board if available (to check hits)
+                val rawOpponentBoard = gameData[opponentBoardField] as? List<String>
+                val trueOpponentBoard = rawOpponentBoard?.map { rowStr ->
+                    rowStr.map { it.toString() }
+                }
+                
+                var currentMyGrid = _uiState.value.playerGrid
+                var currentOpponentView = _uiState.value.opponentGrid
+
+                // Apply moves
+                moves.forEach { move ->
+                    val player = move["player"] as? String
+                    val row = (move["row"] as? Long)?.toInt() ?: 0
+                    val col = (move["col"] as? Long)?.toInt() ?: 0
+                    val result = move["result"] as? String ?: "M"
+
+                    if (player == playerName) {
+                        // I made this move -> Update opponent grid view
+                        currentOpponentView = updateGrid(currentOpponentView, row, col, result)
+                    } else {
+                        // Opponent made this move -> Update my grid
+                        currentMyGrid = updateGrid(currentMyGrid, row, col, result)
+                    }
+                }
+
+                _uiState.update { state ->
+                    state.copy(
+                        isOpponentReady = opponentReady,
+                        isMyTurn = (turn == playerName) && state.isPlayerReady && opponentReady,
+                        trueOpponentBoard = trueOpponentBoard,
+                        playerGrid = if (state.isPlayerReady) currentMyGrid else state.playerGrid, // Keep local placement until ready
+                        opponentGrid = currentOpponentView,
+                        gameWon = winner == playerName,
+                        gameLost = winner != "" && winner != playerName
+                    )
+                }
+            }
+        }
+    }
 
     // Helper to update grid at specific position
     private fun updateGrid(grid: List<List<String>>, row: Int, col: Int, value: String): List<List<String>> {
@@ -156,43 +231,65 @@ class GameViewModel : ViewModel() {
 
     private fun handleGamePlayClick(row: Int, col: Int) {
         val currentState = _uiState.value
-        if (currentState.isPlayerOneTurn) {
-            val currentOpponentGrid = currentState.opponentGrid
-            val cellContent = currentOpponentGrid[row][col]
-            
-            var newGrid = currentOpponentGrid
-            var gameWon = currentState.gameWon
-
-            when (cellContent) {
-                "W" -> {
-                    newGrid = updateGrid(currentOpponentGrid, row, col, "M")
-                }
-                "S" -> {
-                    newGrid = updateGrid(currentOpponentGrid, row, col, "H")
-                    if (checkGameState(newGrid)) {
-                        gameWon = true
-                    }
-                }
-            }
-            
-            _uiState.update {
-                it.copy(
-                    opponentGrid = newGrid,
-                    gameWon = gameWon,
-                    isPlayerOneTurn = false
-                )
-            }
-        } else {
-            // Simulate opponent turn switch back
-             _uiState.update { it.copy(isPlayerOneTurn = true) }
+        
+        // Validation: Must be my turn, game not over, opponent ready, and cell not already shot
+        if (!currentState.isMyTurn || currentState.gameWon || currentState.gameLost || !currentState.isOpponentReady) {
+            return
         }
+        
+        if (currentState.opponentGrid[row][col] != "W") {
+            return // Already shot here
+        }
+
+        // Determine Hit or Miss. Looking at the trueOpponentBoard, if it's null (not synced yet), we can't shoot.
+        val trueBoard = currentState.trueOpponentBoard ?: return
+        val targetCell = trueBoard[row][col]
+        val result = if (targetCell == "S") "H" else "M"
+
+        // Reflect move to firestore
+        val move = mapOf(
+            "player" to playerName,
+            "row" to row,
+            "col" to col,
+            "result" to result
+        )
+        
+        repository.makeMove(gameId, move)
+    
+        val updates = mutableMapOf<String, Any>("turn" to opponentName) // Update turn
+        
+        // Check for Win        
+        var hitCount = currentState.opponentGrid.flatten().count { it == "H" }
+        if (result == "H") hitCount++
+        
+        if (hitCount >= 13) {
+            updates["winner"] = playerName
+            updates["status"] = "finished"
+        }
+        repository.updateGameState(gameId, updates)
     }
 
-    private fun checkGameState(grid: List<List<String>>): Boolean {
-        return grid.flatten().none { it == "S" }
-    }
-
+    // Determine field names, update both fields conditionally
     fun onPlayerReady() {
-        _uiState.update { it.copy(isPlayerReady = true) }
+        val currentState = _uiState.value
+        if (currentState.isPlayerReady) return
+
+        viewModelScope.launch {
+             val gameData = repository.listenForGame(gameId).firstOrNull() ?: return@launch
+             val p1 = gameData["player1"] as? String
+             val isPlayer1 = p1 == playerName
+             
+             val boardField = if (isPlayer1) "player1Board" else "player2Board"
+             val readyField = if (isPlayer1) "player1Ready" else "player2Ready"
+             
+             repository.updatePlayerBoard(
+                 gameId, 
+                 boardField, 
+                 currentState.playerGrid,
+                 readyField
+             ) {
+                 _uiState.update { it.copy(isPlayerReady = true) }
+             }
+        }
     }
 }

@@ -50,8 +50,8 @@ fun LobbyScreen(
     }
 
     LaunchedEffect(uiState.navigateToGame) {
-        uiState.navigateToGame?.let { (player, opponent) ->
-            navController.navigate("GameBoardScreen?playerName=$player&opponentName=$opponent")
+        uiState.navigateToGame?.let { (player, opponent, gameId) ->
+            navController.navigate("GameBoardScreen?gameId=$gameId&playerName=$player&opponentName=$opponent")
             viewModel.onNavigationHandled()
         }
     }
