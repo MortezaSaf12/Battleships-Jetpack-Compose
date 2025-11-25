@@ -165,7 +165,6 @@ class BattleshipRepository {
                 Log.e("ChallengeError", "Error declining challenge: ${exception.message}")
             }
     }
-    }
 
     // Game Logic
     fun createGame(

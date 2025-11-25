@@ -24,8 +24,9 @@ fun GameBoardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .padding(top = 50.dp),
+            .fillMaxSize()
+            .padding(8.dp)
+            .padding(top = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (uiState.isShipPlacementPhase) {
@@ -74,14 +75,14 @@ fun GameBoardScreen(
             }
         }
 
-        // Gameplay Phase
+        // Game Phase
         if (uiState.isPlayerReady) {
             val statusText = when {
-                uiState.gameWon -> "VICTORY! You sank all ships!"
-                uiState.gameLost -> "DEFEAT! Your ships were sunk."
+                uiState.gameWon -> "VICTORY"
+                uiState.gameLost -> "DEFEAT"
                 !uiState.isOpponentReady -> "Waiting for opponent to place ships..."
-                uiState.isMyTurn -> "YOUR TURN! Fire at will!"
-                else -> "OPPONENT'S TURN. Brace for impact!"
+                uiState.isMyTurn -> "YOUR TURN"
+                else -> "OPPONENT'S TURN"
             }
             
             Text(
@@ -89,9 +90,9 @@ fun GameBoardScreen(
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (uiState.isMyTurn || uiState.gameWon) Color.Green else Color.Red,
-                modifier = Modifier.padding(bottom = 8.dp)
+                modifier = Modifier.padding(bottom = 4.dp)
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Player's Grid (with ships) - at the top
             Text(
@@ -102,10 +103,10 @@ fun GameBoardScreen(
             )
             GameGridView(
                 grid = uiState.playerGrid,
-                modifier = Modifier.size(300.dp) // Size of the top grid
+                modifier = Modifier.size(200.dp) // Smaller size for top grid
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Opponent's Grid (empty for attacks) - at the bottom
             Text(
@@ -122,7 +123,8 @@ fun GameBoardScreen(
             
             GameGridView(
                 grid = maskedOpponentGrid,
-                onCellClick = { row, col -> viewModel.onCellClick(row, col) }
+                onCellClick = { row, col -> viewModel.onCellClick(row, col) },
+                modifier = Modifier.size(300.dp) // Larger size for interaction
             )
         }
     }
