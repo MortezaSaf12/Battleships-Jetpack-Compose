@@ -34,12 +34,11 @@ fun LobbyScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Lifecycle observer for setting player online/offline
+    // Lifecycle observer for setting player online when entering lobby
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> viewModel.setPlayerStatus("online")
-                Lifecycle.Event.ON_STOP -> viewModel.setPlayerStatus("offline")
                 else -> Unit
             }
         }

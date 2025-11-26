@@ -103,7 +103,7 @@ fun GameBoardScreen(
             )
             GameGridView(
                 grid = uiState.playerGrid,
-                modifier = Modifier.size(200.dp) // Smaller size for top grid
+                modifier = Modifier.size(200.dp) // Size of top grid
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -126,6 +126,22 @@ fun GameBoardScreen(
                 onCellClick = { row, col -> viewModel.onCellClick(row, col) },
                 modifier = Modifier.size(300.dp) // Larger size for interaction
             )
+            
+            if (uiState.gameWon || uiState.gameLost) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = { 
+                        navController.popBackStack()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Blue,
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Back to Lobby")
+                }
+            }
         }
     }
 }

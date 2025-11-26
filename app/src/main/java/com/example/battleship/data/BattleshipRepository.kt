@@ -69,6 +69,7 @@ class BattleshipRepository {
 
     fun getPlayersFlow(loggedInUsername: String): Flow<List<String>> = callbackFlow {
         val listener = firestore.collection("players")
+            .whereEqualTo("status", "online")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
@@ -76,8 +77,9 @@ class BattleshipRepository {
                 }
                 val players = snapshot?.documents?.mapNotNull {
                     val name = it.getString("name")
-                    val status = it.getString("status")
-                    if (name != null && status != null && name != loggedInUsername) "$name - $status" else null
+                    // We already filtered by status=online in the query, but double check isn't harmful
+                    // Also filter out self
+                    if (name != null && name != loggedInUsername) "$name - online" else null
                 } ?: emptyList()
                 trySend(players)
             }

@@ -63,6 +63,7 @@ class GameViewModel(
                 val opponentReadyField = if (isPlayer1) "player2Ready" else "player1Ready"
 
                 val opponentReady = gameData[opponentReadyField] as? Boolean ?: false
+                val myReady = gameData[myReadyField] as? Boolean ?: false
                 val moves = gameData["moves"] as? List<Map<String, Any>> ?: emptyList()
                 val winner = gameData["winner"] as? String
 
@@ -94,9 +95,9 @@ class GameViewModel(
                 _uiState.update { state ->
                     state.copy(
                         isOpponentReady = opponentReady,
-                        isMyTurn = (turn == playerName) && state.isPlayerReady && opponentReady,
+                        isMyTurn = (turn == playerName) && myReady && opponentReady,
                         trueOpponentBoard = trueOpponentBoard,
-                        playerGrid = if (state.isPlayerReady) currentMyGrid else state.playerGrid, // Keep local placement until ready
+                        playerGrid = if (myReady) currentMyGrid else state.playerGrid,
                         opponentGrid = currentOpponentView,
                         gameWon = winner == playerName,
                         gameLost = winner != "" && winner != playerName
